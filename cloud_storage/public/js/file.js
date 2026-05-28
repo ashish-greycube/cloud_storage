@@ -19,6 +19,9 @@ frappe.ui.form.on('File', {
 		} else if (['ppt', 'pptx', 'odp', 'key'].some(extension => file_string.includes(extension))) {
 			frm.trigger('preview_file_as_pdf')
 		}
+
+		// Formatting Buttons for File Versioning
+		bindFileVersioningButtons(frm);
 	},
 
 	preview_file_as_pdf: async function (frm) {
@@ -121,3 +124,126 @@ function get_sharing_link(frm, reset) {
 			frappe.msgprint(r, __('Sharing Link'))
 		})
 }
+
+function bindFileVersioningButtons(frm) {
+	// Version Link Button
+	cur_frm.fields_dict["versions"].$wrapper.find('.grid-body .rows').find(".grid-row").each(function (i, item) {
+		$(item).find('[data-fieldname="get_version_link"]').css({
+			"display": "flex",
+			"justify-content": "center",
+			"align-items": "center",
+			"width": "100%",
+			"height": "100%",
+		})
+		$(item).find('[data-fieldname="get_version_link"]').empty().append(`<button class="btn btn-primary btn-xs" style="line-height: 1rem; font-size: 0.8rem; border-radius: 6px; background-color: rgb(108, 122, 86); font-weight: bold;">Get Version Link</button>`).click(function (frm) {
+
+			let cdn = $(item).attr('data-name')
+			let cdt = cur_frm.fields_dict["versions"].grid.doctype
+			let row = locals[cdt][cdn]
+			frappe.call({
+				method: 'cloud_storage.api.get_sharing_url',
+				args: {
+					"version": row.version,
+					"key": cur_frm.doc.s3_key,
+				},
+				callback: function (res) {
+					navigator.clipboard.writeText(res.message);
+					frappe.show_alert({
+						message: __('Version link copied to clipboard'),
+						indicator: 'green'
+					});
+				}
+			})
+		},)
+	});
+
+	// Restore Version Button
+	cur_frm.fields_dict["versions"].$wrapper.find('.grid-body .rows').find(".grid-row").each(function (i, item) {
+		$(item).find('[data-fieldname="restore_file_version"]').css({
+			"display": "flex",
+			"justify-content": "center",
+			"align-items": "center",
+			"width": "100%",
+			"height": "100%",
+		})
+
+		$(item).find('[data-fieldname="restore_file_version"]').empty().append(`<button class="btn btn-primary btn-xs" style="line-height: 1rem; font-size: 0.8rem; border-radius: 6px; background-color: rgb(108, 122, 86); font-weight: bold;">Restore File Version</button>`).click(function (frm) {
+			let cdn = $(item).attr('data-name')
+			let cdt = cur_frm.fields_dict["versions"].grid.doctype
+			let row = locals[cdt][cdn]
+			frappe.call('cloud_storage.api.get_latest_version', { "filename": cur_frm.doc.name }).then(latest_version => {
+				console.log(latest_version, row.version)
+				if (latest_version.message && row.version == latest_version.message) {
+					frappe.throw({ message: __("The selected version is already the latest version."), title: __("Cannot Restore Version") })
+					return
+				} else {
+					frappe.confirm(__(`Are you sure you want to restore the version ${row.version}?`),
+						() => {
+							frappe.call({
+								method: "cloud_storage.api.restore_selected_version",
+								args: {
+									"key": cur_frm.doc.s3_key,
+									"version": row.version,
+									"filename": cur_frm.doc.name
+								},
+								freeze: true,
+								freeze_message: __('Restoring version...'),
+							})
+						},
+						() => {
+							return
+						}
+					)
+				}
+			})
+		},)
+	});
+}
+
+
+frappe.ui.form.on('File Version', {
+	get_version_link: function (frm, cdt, cdn) {
+		let row = locals[cdt][cdn]
+		frappe.call({
+			method: 'cloud_storage.api.get_sharing_url',
+			args: {
+				"version": row.version,
+				"key": frm.doc.s3_key,
+			},
+			callback: function (res) {
+				navigator.clipboard.writeText(res.message);
+				frappe.show_alert({
+					message: __('Version link copied to clipboard'),
+					indicator: 'green'
+				});
+			}
+		})
+	},
+
+	restore_file_version: function (frm, cdt, cdn) {
+		let row = locals[cdt][cdn]
+		frappe.call('cloud_storage.api.get_latest_version', { "filename": frm.doc.name }).then(latest_version => {
+			console.log(latest_version, row.version)
+			if (latest_version.message && row.version == latest_version.message) {
+				frappe.throw({ message: __("The selected version is already the latest version."), title: __("Cannot Restore Version") })
+				return
+			} else {
+				frappe.confirm(__(`Are you sure you want to restore the version ${row.version}?`),
+					() => {
+						frappe.call({
+							method: "cloud_storage.api.restore_selected_version",
+							args: {
+								"key": frm.doc.s3_key,
+								"version": row.version,
+								"filename": frm.doc.name
+							}
+						})
+					},
+					() => {
+						return
+					}
+				)
+			}
+		})
+	}
+})
