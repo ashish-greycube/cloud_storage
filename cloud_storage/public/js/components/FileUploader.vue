@@ -248,6 +248,7 @@ function dropfiles(e) {
 	}
 }
 function browse_files() {
+	file_input.value.value = ''
 	file_input.value.click()
 }
 function on_file_input(e) {
@@ -313,6 +314,10 @@ function add_file(file) {
 				}
 
 				const message = response.message
+				if (!message) {
+					add_files([file])
+					return
+				}
 				const filename_exists = message.filename_exists
 				const content_exists = message.content_exists
 				const matched_files = message.matched_files
@@ -458,7 +463,7 @@ function check_restrictions(file) {
 	return is_correct_type && valid_file_size
 }
 function upload_files() {
-	const files_in_rename = this.files.filter(file => file.in_rename)
+	const files_in_rename = files.value.filter(file => file.in_rename)
 	if (files_in_rename.length > 0) {
 		frappe.msgprint(__('Please complete renaming the files before uploading.'))
 
@@ -706,6 +711,8 @@ defineExpose({
 	upload_files,
 	toggle_all_private,
 	wrapper_ready,
+	trigger_upload,
+	hide_dialog_footer,
 	close_dialog,
 })
 </script>

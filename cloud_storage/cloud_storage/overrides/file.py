@@ -259,6 +259,10 @@ class CloudStorageFile(File):
 				"timestamp": get_datetime(),
 			},
 		)
+
+		current_max_idx = frappe.db.get_value("File Version", {"parent": self.name}, "max(idx)") or 0	
+		next_idx = current_max_idx + 1
+
 		if not self.is_new():
 			# File already exists in DB (filename-conflict path in write_file).
 			# Frappe's save lifecycle won't persist this file's child tables,
@@ -272,6 +276,7 @@ class CloudStorageFile(File):
 					"version": str(version_id),
 					"user": frappe.session.user,
 					"timestamp": get_datetime(),
+					"idx": next_idx,
 				}
 			).insert(ignore_permissions=True)
 
@@ -671,8 +676,8 @@ def write_file(file: File, remove_spaces_in_file_name: bool = True) -> File:
 		file_doc.associate_files(file.attached_to_doctype, file.attached_to_name)
 		file = file_doc
 
-	if remove_spaces_in_file_name:
-		file.file_name = file.file_name.replace(" ", "_")
+	# if remove_spaces_in_file_name:
+	# 	file.file_name = file.file_name.replace(" ", "_")
 
 	file.file_name = strip_special_chars(file.file_name)
 	file.flags.cloud_storage = True
@@ -708,6 +713,8 @@ def delete_file(file: File, **kwargs) -> File:
 @frappe.whitelist()
 def validate_file_content(*args, **kwargs):
 	matched_files = []
+	existing_files_by_name = []
+	existing_files_by_hash = []
 	files = frappe.request.files
 
 	if "file" in files:
@@ -730,7 +737,7 @@ def validate_file_content(*args, **kwargs):
 		)
 
 		# if no files are found by name or hash, and if the file is an image, match against optimized content
-		if not existing_files_by_hash and content_type.startswith("image/"):
+		if not existing_files_by_hash and content_type and content_type.startswith("image/"):
 			optimized_content = optimize_image(content, content_type)
 			optimized_content_hash = get_file_content_hash(optimized_content, content_type)
 			existing_files_by_hash = frappe.get_all(
