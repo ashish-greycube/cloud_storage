@@ -375,6 +375,9 @@ function add_file(file) {
 	xhr.setRequestHeader('X-Frappe-CSRF-Token', frappe.csrf_token)
 	const form_data = new FormData()
 	form_data.append('file', file, file.name)
+	if (file.notes) {
+      form_data.append('notes', file.notes)
+  	}  
 	xhr.send(form_data)
 }
 function add_files(file_array) {
@@ -398,6 +401,7 @@ function add_files(file_array) {
 				in_rename: false,
 				uploading: false,
 				private: !props.make_attachments_public,
+				notes: '',
 			}
 		})
 
@@ -542,7 +546,10 @@ function upload_file(file, i) {
 		})
 		xhr.upload.addEventListener('load', e => {
 			file.uploading = false
-			resolve()
+			// Do NOT resolve here — the server is still processing. Resolving on upload
+			// completion (data sent) lets frappe.run_serially start the next upload while
+			// the previous transaction is still open, causing concurrent DB writes and
+			// MySQL InnoDB deadlocks when files share version/association records.
 		})
 		xhr.addEventListener('error', e => {
 			file.failed = true
@@ -603,6 +610,9 @@ function upload_file(file, i) {
 					}
 					frappe.request.cleanup({}, error)
 				}
+				// Resolve after the server finishes (readyState DONE) so frappe.run_serially
+				// waits for the full DB transaction to commit before starting the next upload.
+				resolve()
 			}
 		}
 		xhr.open('POST', '/api/method/upload_file', true)
@@ -647,6 +657,10 @@ function upload_file(file, i) {
 		if (props.attach_doc_image) {
 			form_data.append('max_width', 200)
 			form_data.append('max_height', 200)
+		}
+
+		if (file.notes) {
+			form_data.append('notes', file.notes)
 		}
 
 		xhr.send(form_data)

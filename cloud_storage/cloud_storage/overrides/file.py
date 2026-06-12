@@ -145,7 +145,11 @@ class CloudStorageFile(File):
 						"link_name": self.attached_to_name,  # type: ignore[has-type]
 					},
 				)
-				if not already_associated:
+				associated_doc_already_exists = check_child_file_association_already_exists(
+					self.attached_to_doctype, self.attached_to_name, associated_doc
+				)
+					
+				if not already_associated and not associated_doc_already_exists :
 					frappe.get_doc(
 						{
 							"doctype": "File Association",
@@ -173,6 +177,7 @@ class CloudStorageFile(File):
 							"version": str(self.content_hash),
 							"user": frappe.session.user,
 							"timestamp": get_datetime(),
+							"notes": frappe.form_dict.get("notes", ""),
 						}
 					).insert(ignore_permissions=True)
 
@@ -224,7 +229,11 @@ class CloudStorageFile(File):
 				"File",
 				{"content_hash": self.content_hash, "name": ["!=", self.name], "is_folder": False},  # type: ignore
 			)
-		if associated_doc and associated_doc != self.name:
+
+		association_already_exists = check_child_file_association_already_exists(
+			attached_to_doctype, attached_to_name, associated_doc
+		)
+		if associated_doc and associated_doc != self.name and not association_already_exists:
 			existing_file = frappe.get_doc("File", associated_doc)
 			existing_file.attached_to_doctype = attached_to_doctype
 			existing_file.attached_to_name = attached_to_name
@@ -239,24 +248,27 @@ class CloudStorageFile(File):
 					assoc.link_doctype == attached_to_doctype and assoc.link_name == attached_to_name
 					for assoc in self.file_association
 				)
-				if not already_linked:
+				if not already_linked and not association_already_exists:
 					self.append(
 						"file_association",
 						add_child_file_association(attached_to_doctype, attached_to_name),
 					)
 			else:
-				self.append(
-					"file_association",
-					add_child_file_association(attached_to_doctype, attached_to_name),
-				)
+				if not association_already_exists:
+					self.append(
+						"file_association",
+						add_child_file_association(attached_to_doctype, attached_to_name),
+					)
 
 	def add_file_version(self, version_id):
+		notes = frappe.form_dict.get("notes", "")  # pick up from upload request
 		self.append(
 			"versions",
 			{
 				"version": str(version_id),
 				"user": frappe.session.user,
 				"timestamp": get_datetime(),
+				"notes": notes
 			},
 		)
 
@@ -277,6 +289,7 @@ class CloudStorageFile(File):
 					"user": frappe.session.user,
 					"timestamp": get_datetime(),
 					"idx": next_idx,
+					"notes": notes,
 				}
 			).insert(ignore_permissions=True)
 
@@ -800,3 +813,17 @@ def add_child_file_association(attached_to_doctype, attached_to_name):
 		"user": frappe.session.user,
 		"timestamp": get_datetime(),
 	}
+
+def check_child_file_association_already_exists(attached_to_doctype, attached_to_name, associated_doc):
+	already_associated = frappe.db.exists(
+					"File Association",
+					{
+						"parent": associated_doc,
+						"link_doctype": attached_to_doctype,  # type: ignore[has-type]
+						"link_name": attached_to_name,  # type: ignore[has-type]
+					},
+				)
+	if already_associated:
+		frappe.db.set_value("File Association", {"parent": associated_doc, "link_doctype": attached_to_doctype, "link_name": attached_to_name}, "timestamp", get_datetime())
+
+	return already_associated

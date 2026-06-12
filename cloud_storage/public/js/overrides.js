@@ -33,7 +33,13 @@ function disallow_attachment_delete(frm) {
 
 // TODO: full class override from Frappe's file_uploader.bundle.js file; keep in sync
 frappe.provide('frappe.ui')
-frappe.ui.FileUploader = class CloudStorageFileUploader {
+
+// file_uploader.bundle.js is loaded dynamically via frappe.require() (from desk.bundle.js →
+// upload.js) and reassigns frappe.ui.FileUploader after this bundle runs. Lock our override
+// in place with a non-writable property so the async bundle eval cannot overwrite it.
+
+// frappe.ui.FileUploader = class CloudStorageFileUploader {
+class CloudStorageFileUploader {
 	constructor({
 		wrapper,
 		method,
@@ -167,3 +173,15 @@ frappe.ui.FileUploader = class CloudStorageFileUploader {
 		})
 	}
 }
+
+
+// Object.defineProperty replaces the plain property assignment with a getter/setter pair. 
+// The getter always returns CloudStorageFileUploader. 
+// The no-op setter silently discards any attempt to overwrite it (including Frappe's async bundle). 
+// configurable: true keeps it redefinable if ever needed.																																									
+Object.defineProperty(frappe.ui, 'FileUploader', {
+	get() { return CloudStorageFileUploader },
+	set(_v) { /* intentionally ignores frappe.require async bundle reassignment */ },
+	configurable: true,
+	enumerable: true,
+})

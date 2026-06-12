@@ -179,6 +179,7 @@
       "columns": 0,
       "default": null,
       "dt": "File",
+      "description": "<b>The latest version of the file is displayed at the bottom of the table (last row)</b>",
       "fetch_if_empty": 0,
       "fieldname": "versions",
       "fieldtype": "Table",

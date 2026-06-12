@@ -39,6 +39,13 @@
 					{{ file.error_message }}
 				</span>
 			</div>
+			<input
+				v-if="!uploaded"
+				v-model="file.notes"
+				type="text"
+				:placeholder="__('Add a note for this version...')"
+				class="form-control form-control-sm mt-1 mb-1"
+			/>
 		</div>
 		<div class="file-actions">
 			<ProgressRing
