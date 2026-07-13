@@ -769,9 +769,23 @@ def validate_file_content(*args, **kwargs):
 
 @frappe.whitelist(allow_guest=True)
 def retrieve(key: str) -> None:
+	from urllib.parse import urlsplit, parse_qs
 	if key:
 		client = get_cloud_storage_client()
-		signed_url = client.get_presigned_url(key)
+
+		# Check For FID in Query Params, If Found, Get File Doc and Use S3 Key to Generate Presigned URL
+		parsed_url = urlsplit(key)
+		query_dict = parse_qs(parsed_url.query)
+		if "fid" in query_dict:
+			fid = query_dict["fid"]
+			file_doc = frappe.get_doc("File", fid)
+			if file_doc.s3_key:
+				signed_url = client.get_presigned_url(file_doc.s3_key)
+		
+		# If FID Not Found in Key, Use Key Directly to Generate Presigned URL
+		else:
+			signed_url = client.get_presigned_url(key)
+
 		frappe.local.response["type"] = "redirect"
 		frappe.local.response["location"] = signed_url
 
